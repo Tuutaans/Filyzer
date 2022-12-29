@@ -67,7 +67,24 @@ def mb_query(hash): #function to query a hash in malwarebazaar
     else:
         return f"Error: {response.text}"
 
-def hb_hash_query(hash):
+def md_hash_query(hash): # queries hash in metadefender cloud
+    api_key = values['md_api']
+    url = f"https://api.metadefender.com/v4/hash/{hash}"
+    headers = {"apikey": api_key}
+
+    response = requests.request("GET", url, headers=headers)
+    if response.status_code == 200:
+    # The request was successful, so you can process the response data as needed
+        data = response.json()
+    # Print the response data
+        if data['scan_results']['scan_details']['Webroot SMD']['threat_found'] == "Malware":
+            print("Malware detected by Hybrid-Analysis")
+    else:
+    # There was an error with the request
+        print('Error:', response.status_code)
+
+
+def hb_hash_query(hash): #queries hash in hybrid-analysis
     global is_malware     
     api_key = values['hb_api']
     url = 'https://www.hybrid-analysis.com/api/v2/search/hash'
@@ -131,6 +148,7 @@ def hash_calc(path): #function to calculate file hash when path is provided
     with open(path, 'rb') as f:
         data = f.read()
     hash = hashlib.sha256(data).hexdigest()
+    md_hash_query(hash)
     hb_hash_query(hash)
     vt_hash_query(hash)
     mb_query(hash)
@@ -173,6 +191,7 @@ def main_sec(): #function to handle various commandline arguments to query in TI
     for i in range(len(sys.argv)):
         if sys.argv[i] == "--hash":
             fhash = sys.argv[i + 1]
+            md_hash_query(fhash)
             hb_hash_query(fhash)
             vt_hash_query(fhash)
             mb_query(fhash)
