@@ -155,7 +155,7 @@ def hash_calc(path): #function to calculate file hash when path is provided
 
 def proc_path_name(process): # Find the process's path with the given process name
     for proc in psutil.process_iter():
-        if proc.name() == fprocess:
+        if proc.name() == process:
             hash_calc(proc.exe())
             break
     else:
@@ -163,30 +163,25 @@ def proc_path_name(process): # Find the process's path with the given process na
 
 
 def proc_path_pid(pid): #This function takes process id and returns process paths
-    proc = psutil.Process(fpid)
+    proc = psutil.Process(pid)
     hash_calc(proc.exe())
 
 def proc_stop_id(pid): #this function stops running process whenever a process id argument is detected and running process is malicious
     # Get the process object
-    process = psutil.Process(fpid)
+    process = psutil.Process(pid)
 
     # Terminate the process
     process.terminate()
 
 def proc_stop_procname(process): # this function terminates process ig given process is detected as malicious
     # Get a list of all processes with the specified name
-    processes = [p for p in psutil.process_iter() if p.name() == fprocess]
+    processes = [p for p in psutil.process_iter() if p.name() == process]
 
     # Terminate each process in the list
     for process in processes:
         process.kill()
 
 def main_sec(): #function to handle various commandline arguments to query in TI sites
-    global fhash
-    global fpid
-    global fprocess
-    global fpath
-    global fupload
     
     for i in range(len(sys.argv)):
         if sys.argv[i] == "--hash":
