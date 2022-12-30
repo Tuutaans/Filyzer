@@ -127,21 +127,62 @@ def vt_hash_query(hash): #function to query hash in virustotal
     else:
         print(f"An error occurred: {response.status_code}")
         
-def vt_file_query(): #function to upload file in virustotal
-    api_key = values['vt_api']
-    
-    with open(fupload, 'rb') as file:
-        file_content = file.read()
+def vt_file_upload(file):
+  # the API endpoint for uploading a file
+  endpoint = "https://www.virustotal.com/api/v3/files"
 
-        url = 'https://www.virustotal.com/api/v3/files'
-        headers = {'x-apikey': api_key}
-        response = requests.post(url, headers=headers, data=file_content)
+  # the API key for accessing VirusTotal
+  # (you will need to sign up for an API key at https://www.virustotal.com/gui/join-us)
+  api_key = values['vt_api']
 
-        if response.status_code == 200:
-            scan_results = response.json()
-            print(scan_results)
-        else:
-            print('An error occurred:', response.status_code)
+  # the file to be uploaded
+  file = open(file, "rb")
+
+  # the headers for the API request
+  headers = {"x-apikey": api_key}
+
+  # the data for the API request
+  data = {"file": file}
+
+  response = requests.post(endpoint, headers=headers, files=data)
+
+  # check the status code of the response
+  if response.status_code == 200:
+    result = response.json()
+
+      # get the scan results for the file
+  analysis_id = result['data']['id']
+
+  scan_results_endpoint = "https://www.virustotal.com/api/v3/analyses/{analysis_id}"
+ 
+  # send the API request to retrieve the scan results
+  response = requests.get(scan_results_endpoint.format(analysis_id=analysis_id), headers=headers)
+
+  # check the status code of the response
+  if response.status_code == 200:
+      # if the request was successful, parse the response data
+      response_data  = response.json()
+
+      # get the scan results for the file
+      scan_results = response_data['data']['attributes']['results']
+
+    # initialize a counter for the number of malicious scan results
+      malicious_count = 0
+      total_av_count = 0
+
+    # iterate through the scan results
+      for engine, result in scan_results.items():
+        # check if the file was marked as malicious by this engine
+        total_av_count +=1
+        if result['category'] == 'malicious':
+            # increment the counter
+            malicious_count += 1
+
+      if total_av_count > 0:
+        print(f"{malicious_count} out of {total_av_count} vendor detected file as malicious")
+      else:
+        print('Unexpected event occurred')
+
 
 
 def hash_calc(path): #function to calculate file hash when path is provided
@@ -210,6 +251,8 @@ def main_sec(): #function to handle various commandline arguments to query in TI
 
         if sys.argv[i] == "--file-upload":
             fupload = sys.argv[i + 1]    
+            vt_file_upload(fupload)
+
 
 
 main_sec()
