@@ -1,3 +1,4 @@
+import time
 import sys
 import requests
 import json
@@ -76,12 +77,18 @@ def md_hash_query(hash): # queries hash in metadefender cloud
     if response.status_code == 200:
     # The request was successful, so you can process the response data as needed
         data = response.json()
-    # Print the response data
-        if data['scan_results']['scan_details']['Webroot SMD']['threat_found'] == "Malware":
-            print("Malware detected by Hybrid-Analysis")
-    else:
-    # There was an error with the request
-        print('Error:', response.status_code)
+        try:
+            if data['scan_results']['scan_details']['Webroot SMD']['threat_found'] == "Malware":
+                print("Malware detected by Meta Defender")
+        
+        except:
+            if data['scan_results']['scan_all_result_a'] == "Infected":
+                print("Hash match to a known malware")
+
+
+        else:
+        # There was an error with the request
+            print('Error:', response.status_code)
 
 
 def hb_hash_query(hash): #queries hash in hybrid-analysis
@@ -99,7 +106,6 @@ def hb_hash_query(hash): #queries hash in hybrid-analysis
     }
 
     response = requests.post(url, headers=headers, data=data)
-
     if response.status_code == 200:
         # If the status code is 200, the request was successful
         # Parse the JSON response
@@ -145,7 +151,6 @@ def vt_file_upload(file):
   data = {"file": file}
 
   response = requests.post(endpoint, headers=headers, files=data)
-
   # check the status code of the response
   if response.status_code == 200:
     result = response.json()
@@ -155,9 +160,10 @@ def vt_file_upload(file):
 
   scan_results_endpoint = "https://www.virustotal.com/api/v3/analyses/{analysis_id}"
  
+  print("Waiting for 30 second for letting the file be analyzed by various antivirus product")
+  time.sleep(30 )
   # send the API request to retrieve the scan results
   response = requests.get(scan_results_endpoint.format(analysis_id=analysis_id), headers=headers)
-
   # check the status code of the response
   if response.status_code == 200:
       # if the request was successful, parse the response data
@@ -178,10 +184,10 @@ def vt_file_upload(file):
             # increment the counter
             malicious_count += 1
 
-      if total_av_count > 0:
+      if total_av_count >= 0:
         print(f"{malicious_count} out of {total_av_count} vendor detected file as malicious")
       else:
-        print('Unexpected event occurred')
+        print('Not Detected as Malware in VT')
 
 
 
@@ -227,10 +233,14 @@ def main_sec(): #function to handle various commandline arguments to query in TI
     for i in range(len(sys.argv)):
         if sys.argv[i] == "--hash":
             fhash = sys.argv[i + 1]
+            start_time= time.time()
+
             md_hash_query(fhash)
             hb_hash_query(fhash)
             vt_hash_query(fhash)
             mb_query(fhash)
+            end_time = time.time()
+            print("total time :", end_time - start_time)
 
         if sys.argv[i] == "--path":
             fpath = sys.argv[i + 1]
@@ -252,7 +262,6 @@ def main_sec(): #function to handle various commandline arguments to query in TI
         if sys.argv[i] == "--file-upload":
             fupload = sys.argv[i + 1]    
             vt_file_upload(fupload)
-
 
 
 main_sec()
