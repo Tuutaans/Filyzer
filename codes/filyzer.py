@@ -5,6 +5,9 @@ import json
 import hashlib
 import psutil
 import os
+import pickle
+import logging
+import re
 
 #declared required variable 
 fupload =""
@@ -46,92 +49,188 @@ except:  #in case of api not found in a file looking for user to provide api
                     f.write(f"otx_api={otx_api}\n")
 
 def mb_query(hash): #function to query a hash in malwarebazaar
-    global is_malware
-    url = "https://mb-api.abuse.ch/api/v1/"
-    headers = {"query": "get_info","hash": hash}
-    headers["Authorization"] = f"Token {values['mb_api']}"
-    response = requests.post(url, data=headers)
+    cache_file = f"{hash}_mb.pkl"
+    
+    # Check if the response has been cached
+    if os.path.exists(cache_file):
+        # Load the cached response from the file
+        with open(cache_file, "rb") as f:
+            response = pickle.load(f)
+            print("Loaded response from cache.")
+    else:
+        # Make a new request to MalwareBazaar
+        url = "https://mb-api.abuse.ch/api/v1/"
+        headers = {"query": "get_info","hash": hash}
+        headers["Authorization"] = f"Token {values['mb_api']}"
+        try:
+            response = requests.post(url, data=headers)
+            # Save the response to the cache file
+            with open(cache_file, "wb") as f:
+                pickle.dump(response, f)
+                print("Saved response to cache.")
+        except Exception as e:
+            print(e)
+            return False
+    
     if response.status_code == 200:
         response = json.loads(response.text)
         if response['query_status'] == "hash_not_found":
-            print("File's hash not found in MalwareBazaar")
+            return False
         elif response['query_status'] == "http_post_expected":
-            print("Wrong http method")
+            return False
         elif response['query_status'] == "illegal_hash":
-            print("Not a Hash")
+            return False
         elif response['query_status'] == "no_hash_provided":
-            print("Hash not provided")
+            return False
         else:
-            print("Sample Found")
-            is_malware = "True"
-            
+            return True
     else:
-        return f"Error: {response.text}"
+        print(f"An error occurred while querying MalwareBazaar: {response.status_code}")
+        return False
 
-def md_hash_query(hash): # queries hash in metadefender cloud
+def md_hash_query(hash):
+    """
+    Queries MetaDefender Cloud for information about a file with the given hash.
+    
+    Args:
+        hash (str): The hash of the file to be analyzed.
+        
+    Returns:
+        bool: True if the file is detected as malicious by MetaDefender Cloud, False otherwise.
+    """
     api_key = values['md_api']
-    url = f"https://api.metadefender.com/v4/hash/{hash}"
-    headers = {"apikey": api_key}
-
-    response = requests.request("GET", url, headers=headers)
+    cache_file = f"{hash}_md.pkl"
+    
+    # Check if the response has been cached
+    if os.path.exists(cache_file):
+        # Load the cached response from the file
+        with open(cache_file, "rb") as f:
+            response = pickle.load(f)
+            print("Loaded response from cache.")
+    else:
+        # Make a new request to MetaDefender Cloud
+        url = f"https://api.metadefender.com/v4/hash/{hash}"
+        headers = {"apikey": api_key}
+        try:
+            response = requests.request("GET", url, headers=headers)
+            # Save the response to the cache file
+            with open(cache_file, "wb") as f:
+                pickle.dump(response, f)
+                print("Saved response to cache.")
+        except Exception as e:
+            print(e)
+            return False
+    
     if response.status_code == 200:
-    # The request was successful, so you can process the response data as needed
+        # The request was successful, so you can process the response data as needed
         data = response.json()
         try:
             if data['scan_results']['scan_details']['Webroot SMD']['threat_found'] == "Malware":
-                print("Malware detected by Meta Defender")
-        
+                return True
         except:
             if data['scan_results']['scan_all_result_a'] == "Infected":
-                print("Hash match to a known malware")
-
-
-        else:
+                return True
+        return False
+    else:
         # There was an error with the request
-            print('Error:', response.status_code)
+        print(f"An error occurred while querying MetaDefender Cloud: {response.status_code}")
+        return False
 
 
 def hb_hash_query(hash): #queries hash in hybrid-analysis
-    global is_malware     
+    """
+    Queries Hybrid Analysis for information about a file with the given hash.
+    
+    Args:
+        hash (str): The hash of the file to be analyzed.
+        
+    Returns:
+        bool: True if the file is detected as malicious by Hybrid Analysis, False otherwise.
+    """
     api_key = values['hb_api']
-    url = 'https://www.hybrid-analysis.com/api/v2/search/hash'
-    headers = {
-        'accept': 'application/json',
-        'user-agent': 'Falcon Sandbox',
-        'api-key': api_key,
-        'Content-Type': 'application/x-www-form-urlencoded'
-    }
-    data = {
-        'hash': hash
-    }
+    cache_file = f"{hash}_hb.pkl"
+    
+    # Check if the response has been cached
+    if os.path.exists(cache_file):
+        # Load the cached response from the file
+        with open(cache_file, "rb") as f:
+            response = pickle.load(f)
+            for item in response:
+                match = re.search(r'verdict.*malicious', str(item))
+                if match:
+                    return True
+    else:
+        # Make a new request to Hybrid Analysis
+        url = "https://www.hybrid-analysis.com/api/v2/search/hash"
+        headers = {
+            'accept': 'application/json',
+            'user-agent': 'Falcon Sandbox',
+            'api-key': api_key,
+            'Content-Type': 'application/x-www-form-urlencoded'
+        }
+        data = {
+            'hash': hash
+        }
+                
+        response = requests.post(url, headers=headers, data=data)
 
-    response = requests.post(url, headers=headers, data=data)
+    
     if response.status_code == 200:
         # If the status code is 200, the request was successful
         # Parse the JSON response
         data = response.json()
+        try:
+            # Save the response to the cache file
+            with open(cache_file, "wb") as f:
+                pickle.dump(data, f)
+                print("Saved response to cache.")
+        except Exception as e:
+            print(e)
+            return False
+
         for d in data:
             if d.get("verdict") == "malicious":
-                is_malware="True"
-        print('Sample is malicious')
-    
+                return True
+        return False
+    else:
+        # There was an error with the request
+        print(f"An error occurred while querying Hybrid Analysis: {response.status_code}")
+        return False
 
 
 def vt_hash_query(hash): #function to query hash in virustotal
-    global is_malware
     api_key = values['vt_api']
-    response = requests.get(f"https://www.virustotal.com/api/v3/files/{hash}", headers={"x-apikey": api_key})
-    if response.status_code == 200:
+    cache_file = f"{hash}_vt.pkl"
     
-        file_report = response.json()
-        
-        # Get the number of vendors that detected the file as malicious
-        num_vendors_detected_malicious = file_report["data"]["attributes"]["last_analysis_stats"]["malicious"]
-        print(f"{num_vendors_detected_malicious} vendors detected the file as malicious.")
-        is_malware = "True"
-        
+    # Check if the response has been cached
+    if os.path.exists(cache_file):
+        # Load the cached response from the file
+        with open(cache_file, "rb") as f:
+            response = pickle.load(f)
+            print("Loaded response from cache.")
     else:
-        print(f"An error occurred: {response.status_code}")
+        try:
+            response = requests.get(f"https://www.virustotal.com/api/v3/files/{hash}", headers={"x-apikey": api_key})
+            # Save the response to the cache file
+            with open(cache_file, "wb") as f:
+                pickle.dump(response, f)
+                print("Saved response to cache.")
+        except Exception as e:
+            print(e)
+            return False
+
+        if response.status_code == 200:
+        
+            file_report = response.json()
+            
+            # Get the number of vendors that detected the file as malicious
+            num_vendors_detected_malicious = file_report["data"]["attributes"]["last_analysis_stats"]["malicious"]
+            print(f"{num_vendors_detected_malicious} vendors detected the file as malicious.")
+            is_malware = "True"
+            
+        else:
+            print(f"An error occurred: {response.status_code}")
+            return False
         
 def vt_file_upload(file):
   # the API endpoint for uploading a file
