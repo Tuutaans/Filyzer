@@ -56,7 +56,11 @@ def mb_query(hash): #function to query a hash in malwarebazaar
         # Load the cached response from the file
         with open(cache_file, "rb") as f:
             response = pickle.load(f)
-            print("Loaded response from cache.")
+            for item in response:
+                match = re.search(r"query_status':\\s'ok'", str(item))
+                if match:
+                    return "Malware"
+
     else:
         # Make a new request to MalwareBazaar
         url = "https://mb-api.abuse.ch/api/v1/"
@@ -67,26 +71,30 @@ def mb_query(hash): #function to query a hash in malwarebazaar
             # Save the response to the cache file
             with open(cache_file, "wb") as f:
                 pickle.dump(response, f)
-                print("Saved response to cache.")
         except Exception as e:
             print(e)
             return False
     
-    if response.status_code == 200:
-        response = json.loads(response.text)
-        if response['query_status'] == "hash_not_found":
-            return False
-        elif response['query_status'] == "http_post_expected":
-            return False
-        elif response['query_status'] == "illegal_hash":
-            return False
-        elif response['query_status'] == "no_hash_provided":
-            return False
+        if response.status_code == 200:
+            response = json.loads(response.text)
+            if response['query_status'] == "hash_not_found":
+                return False
+            elif response['query_status'] == "http_post_expected":
+                return False
+            elif response['query_status'] == "illegal_hash":
+                return False
+            elif response['query_status'] == "no_hash_provided":
+                return False
+            elif response['query_status'] == "no_results":
+                return False
+            else:
+                if response['query_status'] == "ok":
+                    return "Malware"
+                return False
+
         else:
-            return True
-    else:
-        print(f"An error occurred while querying MalwareBazaar: {response.status_code}")
-        return False
+            print(f"An error occurred while querying MalwareBazaar: {response.status_code}")
+            return False
 
 def md_hash_query(hash):
     """
@@ -106,30 +114,32 @@ def md_hash_query(hash):
         # Load the cached response from the file
         with open(cache_file, "rb") as f:
             response = pickle.load(f)
-            print("Loaded response from cache.")
-    else:
-        # Make a new request to MetaDefender Cloud
-        url = f"https://api.metadefender.com/v4/hash/{hash}"
-        headers = {"apikey": api_key}
-        try:
-            response = requests.request("GET", url, headers=headers)
-            # Save the response to the cache file
-            with open(cache_file, "wb") as f:
-                pickle.dump(response, f)
-                print("Saved response to cache.")
-        except Exception as e:
-            print(e)
-            return False
+            for item in response:
+                match = re.search(r"scan_all_result_a':\\s'Infected'", str(item))
+                if match:
+                    return "Malware"
     
+        # Make a new request to MetaDefender Cloud
+    url = f"https://api.metadefender.com/v4/hash/{hash}"
+    headers = {"apikey": api_key}
+    try:
+        response = requests.request("GET", url, headers=headers)
+        # Save the response to the cache file
+        with open(cache_file, "wb") as f:
+            pickle.dump(response, f)
+
+    except Exception as e:
+        print(e)
+        return False
     if response.status_code == 200:
         # The request was successful, so you can process the response data as needed
         data = response.json()
         try:
             if data['scan_results']['scan_details']['Webroot SMD']['threat_found'] == "Malware":
-                return True
+                return "Malware"
         except:
             if data['scan_results']['scan_all_result_a'] == "Infected":
-                return True
+                return "Malware"
         return False
     else:
         # There was an error with the request
@@ -156,9 +166,9 @@ def hb_hash_query(hash): #queries hash in hybrid-analysis
         with open(cache_file, "rb") as f:
             response = pickle.load(f)
             for item in response:
-                match = re.search(r'verdict.*malicious', str(item))
+                match = re.search(r"'verdict':\\s'malicious'", str(item))
                 if match:
-                    return True
+                    return "Malware"
     else:
         # Make a new request to Hybrid Analysis
         url = "https://www.hybrid-analysis.com/api/v2/search/hash"
@@ -174,28 +184,26 @@ def hb_hash_query(hash): #queries hash in hybrid-analysis
                 
         response = requests.post(url, headers=headers, data=data)
 
-    
-    if response.status_code == 200:
-        # If the status code is 200, the request was successful
-        # Parse the JSON response
-        data = response.json()
-        try:
-            # Save the response to the cache file
-            with open(cache_file, "wb") as f:
-                pickle.dump(data, f)
-                print("Saved response to cache.")
-        except Exception as e:
-            print(e)
-            return False
+        if response.status_code == 200:
+            # If the status code is 200, the request was successful
+            # Parse the JSON response
+            data = response.json()
+            try:
+                # Save the response to the cache file
+                with open(cache_file, "wb") as f:
+                    pickle.dump(data, f)
+            except Exception as e:
+                print(e)
+                return False
 
-        for d in data:
-            if d.get("verdict") == "malicious":
-                return True
-        return False
-    else:
-        # There was an error with the request
-        print(f"An error occurred while querying Hybrid Analysis: {response.status_code}")
-        return False
+            for d in data:
+                if d.get("verdict") == "malicious":
+                    return "Malware"
+            return False
+        else:
+            # There was an error with the request
+            print(f"An error occurred while querying Hybrid Analysis: {response.status_code}")
+            return False
 
 
 def vt_hash_query(hash): #function to query hash in virustotal
@@ -207,14 +215,16 @@ def vt_hash_query(hash): #function to query hash in virustotal
         # Load the cached response from the file
         with open(cache_file, "rb") as f:
             response = pickle.load(f)
-            print("Loaded response from cache.")
+            for item in response:
+                match = re.search(r"'verdict':\\s'malicious'", str(item))
+                if match:
+                    return "Malware"
     else:
         try:
             response = requests.get(f"https://www.virustotal.com/api/v3/files/{hash}", headers={"x-apikey": api_key})
             # Save the response to the cache file
             with open(cache_file, "wb") as f:
                 pickle.dump(response, f)
-                print("Saved response to cache.")
         except Exception as e:
             print(e)
             return False
@@ -225,8 +235,8 @@ def vt_hash_query(hash): #function to query hash in virustotal
             
             # Get the number of vendors that detected the file as malicious
             num_vendors_detected_malicious = file_report["data"]["attributes"]["last_analysis_stats"]["malicious"]
-            print(f"{num_vendors_detected_malicious} vendors detected the file as malicious.")
-            is_malware = "True"
+            # print(f"{num_vendors_detected_malicious} vendors detected the file as malicious.")
+            return "Malware"
             
         else:
             print(f"An error occurred: {response.status_code}")
@@ -294,15 +304,13 @@ def hash_calc(path): #function to calculate file hash when path is provided
     with open(path, 'rb') as f:
         data = f.read()
     hash = hashlib.sha256(data).hexdigest()
-    md_hash_query(hash)
-    hb_hash_query(hash)
-    vt_hash_query(hash)
-    mb_query(hash)
+    return [md_hash_query(hash), hb_hash_query(hash), vt_hash_query(hash), mb_query(hash)]
 
 def proc_path_name(process): # Find the process's path with the given process name
     for proc in psutil.process_iter():
         if proc.name() == process:
-            hash_calc(proc.exe())
+            if "Malware" in hash_calc(proc.exe()):
+                proc_stop_procname(process)
             break
     else:
         print('Process not found')
@@ -310,7 +318,9 @@ def proc_path_name(process): # Find the process's path with the given process na
 
 def proc_path_pid(pid): #This function takes process id and returns process paths
     proc = psutil.Process(pid)
-    hash_calc(proc.exe())
+    if "Malware" in hash_calc(proc.exe()):
+        proc_stop_id(pid)
+
 
 def proc_stop_id(pid): #this function stops running process whenever a process id argument is detected and running process is malicious
     # Get the process object
@@ -348,19 +358,22 @@ def main_sec(): #function to handle various commandline arguments to query in TI
         if sys.argv[i] == "--process":
             fprocess = sys.argv[i + 1]
             proc_path_name(fprocess)
-            if is_malware == "True":
-                proc_stop_procname(fprocess)
         
 
         if sys.argv[i] == "--pid":
             fpid = int(sys.argv[i + 1])
             proc_path_pid(fpid)
-            if is_malware == "True":
-                proc_stop_id(fpid)
 
         if sys.argv[i] == "--file-upload":
             fupload = sys.argv[i + 1]    
             vt_file_upload(fupload)
-
+        
+        if sys.argv[i] == "--cache-clean":
+            for file in os.scandir('.\\'):
+                if file.name.endswith('.pkl') and file.is_file():
+                    try:
+                        os.unlink(file.path)
+                    except OSError:
+                        print("Error while deleting file: ", file.path)
 
 main_sec()
