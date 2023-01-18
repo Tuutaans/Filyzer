@@ -1,3 +1,4 @@
+import mmap
 import time
 import sys
 import requests
@@ -13,8 +14,8 @@ import re
 fupload =""
 vt_api =""
 mb_api = ""
-tr_api = ""
-otx_api = ""
+md_api = ""
+hb_api =""
 fpath=""
 fprocess=""
 fpid=""
@@ -22,31 +23,34 @@ fhash=""
 is_malware = ""
 values = {} #storing api saved in a file
 
-try: #loading the api from a file
-    with open(".\\api_list.txt", "r") as f:
-        for line in f:
-            key, value = line.strip().split("=")
-            values[key] = value
+file_path = ".\\api_list.txt"
+try:
+    if os.path.getsize(file_path) > 0:
+        with open(".\\api_list.txt", "r") as f:
+            for line in f:
+                key, value = line.strip().split("=")
+                values[key] = value
 
-except:  #in case of api not found in a file looking for user to provide api
+except:  
     if len(values) == 0:
         with open(".\\api_list.txt","w") as f:
             for i in range(len(sys.argv)):
-                if sys.argv[i] == "--vt-api":
+                if sys.argv[i] == "--vt-api": # virus total api
                     vt_api = sys.argv[i + 1]
                     f.write(f"vt_api={vt_api}\n")
 
-                if sys.argv[i] == "--mb-api":
+                if sys.argv[i] == "--mb-api": # malware bazaar api
                     mb_api = sys.argv[i + 1]
                     f.write(f"mb_api={mb_api}\n")
 
-                if sys.argv[i] == "--tr-api":
+                if sys.argv[i] == "--md-api": #metadefender api
                     tr_api = sys.argv[i + 1]
-                    f.write(f"tr_api={tr_api}\n")
+                    f.write(f"md_api={md_api}\n")
 
-                if sys.argv[i] == "--otx-api":
+                if sys.argv[i] == "--hb-api": #hybrid analysis api
                     otx_api = sys.argv[i + 1]
-                    f.write(f"otx_api={otx_api}\n")
+                    f.write(f"hb_api={hb_api}\n")
+
 
 def mb_query(hash): #function to query a hash in malwarebazaar
     cache_file = f"{hash}_mb.pkl"
@@ -54,12 +58,11 @@ def mb_query(hash): #function to query a hash in malwarebazaar
     # Check if the response has been cached
     if os.path.exists(cache_file):
         # Load the cached response from the file
-        with open(cache_file, "rb") as f:
-            response = pickle.load(f)
-            for item in response:
-                match = re.search(r"query_status':\\s'ok'", str(item))
-                if match:
-                    return "Malware"
+        with open(cache_file, "r") as f:
+            response = f.read()
+            match = re.search(r"query_status\S:.*ok\S", str(response))
+            if match:
+                return "Malware"
 
     else:
         # Make a new request to MalwareBazaar
@@ -70,8 +73,8 @@ def mb_query(hash): #function to query a hash in malwarebazaar
             response = requests.post(url, data=headers)
             # Save the response to the cache file
             with open(cache_file, "wb") as f:
-                pickle.dump(response, f)
-        except Exception as e:
+                f.write(response.content)
+        except Exception as e:  
             print(e)
             return False
     
@@ -106,18 +109,18 @@ def md_hash_query(hash):
     Returns:
         bool: True if the file is detected as malicious by MetaDefender Cloud, False otherwise.
     """
+    
     api_key = values['md_api']
     cache_file = f"{hash}_md.pkl"
     
     # Check if the response has been cached
     if os.path.exists(cache_file):
         # Load the cached response from the file
-        with open(cache_file, "rb") as f:
-            response = pickle.load(f)
-            for item in response:
-                match = re.search(r"scan_all_result_a':\\s'Infected'", str(item))
-                if match:
-                    return "Malware"
+        with open(cache_file, "r") as f:
+            response = json.load(f)
+            match = re.search(r"scan_all_result_a.*I|infected.*", str(response))
+            if match:
+                return "Malware"
     
         # Make a new request to MetaDefender Cloud
     url = f"https://api.metadefender.com/v4/hash/{hash}"
@@ -126,7 +129,7 @@ def md_hash_query(hash):
         response = requests.request("GET", url, headers=headers)
         # Save the response to the cache file
         with open(cache_file, "wb") as f:
-            pickle.dump(response, f)
+            f.write(response.content)
 
     except Exception as e:
         print(e)
@@ -138,9 +141,9 @@ def md_hash_query(hash):
             if data['scan_results']['scan_details']['Webroot SMD']['threat_found'] == "Malware":
                 return "Malware"
         except:
-            if data['scan_results']['scan_all_result_a'] == "Infected":
+            if "Infect" in data['scan_results']['scan_all_result_a'] or "infect" in data['scan_results']['scan_all_result_a']: 
                 return "Malware"
-        return False
+        
     else:
         # There was an error with the request
         print(f"An error occurred while querying MetaDefender Cloud: {response.status_code}")
@@ -164,11 +167,11 @@ def hb_hash_query(hash): #queries hash in hybrid-analysis
     if os.path.exists(cache_file):
         # Load the cached response from the file
         with open(cache_file, "rb") as f:
-            response = pickle.load(f)
-            for item in response:
-                match = re.search(r"'verdict':\\s'malicious'", str(item))
-                if match:
+            response = json.load(f)
+            for d in response:
+                if d.get("verdict") == "malicious":
                     return "Malware"
+    
     else:
         # Make a new request to Hybrid Analysis
         url = "https://www.hybrid-analysis.com/api/v2/search/hash"
@@ -190,8 +193,8 @@ def hb_hash_query(hash): #queries hash in hybrid-analysis
             data = response.json()
             try:
                 # Save the response to the cache file
-                with open(cache_file, "wb") as f:
-                    pickle.dump(data, f)
+                with open(cache_file, "w") as f:
+                    json.dump(data,f)
             except Exception as e:
                 print(e)
                 return False
@@ -214,17 +217,15 @@ def vt_hash_query(hash): #function to query hash in virustotal
     if os.path.exists(cache_file):
         # Load the cached response from the file
         with open(cache_file, "rb") as f:
-            response = pickle.load(f)
-            for item in response:
-                match = re.search(r"'verdict':\\s'malicious'", str(item))
-                if match:
-                    return "Malware"
+            response = json.load(f)
+            match = re.search(r"malicious.*\d+,", str(response))
+            if response['malicious'] > 0:
+                return "Malware"
+    
     else:
         try:
             response = requests.get(f"https://www.virustotal.com/api/v3/files/{hash}", headers={"x-apikey": api_key})
-            # Save the response to the cache file
-            with open(cache_file, "wb") as f:
-                pickle.dump(response, f)
+            
         except Exception as e:
             print(e)
             return False
@@ -235,8 +236,12 @@ def vt_hash_query(hash): #function to query hash in virustotal
             
             # Get the number of vendors that detected the file as malicious
             num_vendors_detected_malicious = file_report["data"]["attributes"]["last_analysis_stats"]["malicious"]
-            # print(f"{num_vendors_detected_malicious} vendors detected the file as malicious.")
-            return "Malware"
+            # Save the response to the cache file
+            with open(cache_file, "w") as f:
+                json.dump(file_report["data"]["attributes"]["last_analysis_stats"], f)
+
+            if int(num_vendors_detected_malicious) > 0:
+                return "Malware"
             
         else:
             print(f"An error occurred: {response.status_code}")
@@ -328,6 +333,7 @@ def proc_stop_id(pid): #this function stops running process whenever a process i
 
     # Terminate the process
     process.terminate()
+    print(f"PID {pid} stopped")
 
 def proc_stop_procname(process): # this function terminates process ig given process is detected as malicious
     # Get a list of all processes with the specified name
@@ -336,29 +342,46 @@ def proc_stop_procname(process): # this function terminates process ig given pro
     # Terminate each process in the list
     for process in processes:
         process.kill()
+        print(f"{process.name()} process killed")
+
+def help_func():
+    print('''Threat Intelligence-based Malware Analysis (TIMA)
+    --hash  Takes hash values as an argument. Print "Malware" if detected as malware in any platform else "None" will be printed 
+    --path  Takes path of an file as an argument, and retrieve the file hash
+    --process   Takes process name as an argument, and if found as malicious terminates the process
+    --pid   Takes process id as an argument 
+    --file-upload   Uploads file to VirusTotal for analysis
+    --cache-clean   Deletes cached file
+    --vt-api    loads VirusTotal API
+    --hb-api    loads Hybdir Analysis API
+    --md-api    loads MetaDefender API
+    --mb-api    loads MalwareBazaar API
+    ''')
 
 def main_sec(): #function to handle various commandline arguments to query in TI sites
-    
+    if len(sys.argv) <= 1:
+        help_func()
+
     for i in range(len(sys.argv)):
         if sys.argv[i] == "--hash":
             fhash = sys.argv[i + 1]
             start_time= time.time()
 
-            md_hash_query(fhash)
-            hb_hash_query(fhash)
-            vt_hash_query(fhash)
-            mb_query(fhash)
+            print(md_hash_query(fhash))
+            print(hb_hash_query(fhash))
+            print(vt_hash_query(fhash))
+            print(mb_query(fhash))
             end_time = time.time()
             print("total time :", end_time - start_time)
 
         if sys.argv[i] == "--path":
             fpath = sys.argv[i + 1]
             hash_calc(fpath)
-
+            
         if sys.argv[i] == "--process":
             fprocess = sys.argv[i + 1]
             proc_path_name(fprocess)
-        
+            
 
         if sys.argv[i] == "--pid":
             fpid = int(sys.argv[i + 1])
@@ -375,5 +398,8 @@ def main_sec(): #function to handle various commandline arguments to query in TI
                         os.unlink(file.path)
                     except OSError:
                         print("Error while deleting file: ", file.path)
+
+        if sys.argv[i] == "--help":
+            help_func()
 
 main_sec()
