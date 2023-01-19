@@ -1,4 +1,5 @@
-import mmap
+import zipfile
+import shutil
 import time
 import sys
 import requests
@@ -6,8 +7,6 @@ import json
 import hashlib
 import psutil
 import os
-import pickle
-import logging
 import re
 
 #declared required variable 
@@ -274,8 +273,9 @@ def vt_file_upload(file):
 
   scan_results_endpoint = "https://www.virustotal.com/api/v3/analyses/{analysis_id}"
  
-  print("Waiting for 30 second for letting the file be analyzed by various antivirus product")
-  time.sleep(30 )
+  print("Waiting for 1 minute for letting the file be analyzed by various antivirus product")
+  time.sleep(60)
+  print('The analysis time of file may vary so re-run the command')
   # send the API request to retrieve the scan results
   response = requests.get(scan_results_endpoint.format(analysis_id=analysis_id), headers=headers)
   # check the status code of the response
@@ -310,6 +310,27 @@ def hash_calc(path): #function to calculate file hash when path is provided
         data = f.read()
     hash = hashlib.sha256(data).hexdigest()
     return [md_hash_query(hash), hb_hash_query(hash), vt_hash_query(hash), mb_query(hash)]
+
+def file_isolate(path):
+    file_opt = hash_calc(path)
+    if "Malware" in file_opt:
+        # specify the directory path
+        directory_path = '.\\isolate'
+
+        # check if the directory exists
+        if not os.path.exists(directory_path):
+            # create the directory
+            os.makedirs(directory_path)
+
+        # get the file name from the path
+        file_name = path.split('\\')[-1]
+
+        # create a zip file
+        with zipfile.ZipFile(file_name.split('.')[0] + '.zip', 'w') as archive:
+            archive.write(path)
+        os.remove(path)
+        
+        print("File moved to isolate directory")
 
 def proc_path_name(process): # Find the process's path with the given process name
     for proc in psutil.process_iter():
@@ -376,7 +397,7 @@ def main_sec(): #function to handle various commandline arguments to query in TI
 
         if sys.argv[i] == "--path":
             fpath = sys.argv[i + 1]
-            hash_calc(fpath)
+            file_isolate(fpath)
             
         if sys.argv[i] == "--process":
             fprocess = sys.argv[i + 1]
