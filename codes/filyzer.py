@@ -1,5 +1,4 @@
 import zipfile
-import shutil
 import time
 import sys
 import requests
@@ -8,6 +7,7 @@ import hashlib
 import psutil
 import os
 import re
+import pyfiglet
 
 #declared required variable 
 fupload =""
@@ -312,16 +312,9 @@ def hash_calc(path): #function to calculate file hash when path is provided
     return [md_hash_query(hash), hb_hash_query(hash), vt_hash_query(hash), mb_query(hash)]
 
 def file_isolate(path):
-    file_opt = hash_calc(path)
+    file_opt = hash_calc(path)  
     if "Malware" in file_opt:
-        # specify the directory path
-        directory_path = '.\\isolate'
-
-        # check if the directory exists
-        if not os.path.exists(directory_path):
-            # create the directory
-            os.makedirs(directory_path)
-
+       
         # get the file name from the path
         file_name = path.split('\\')[-1]
 
@@ -366,7 +359,8 @@ def proc_stop_procname(process): # this function terminates process ig given pro
         print(f"{process.name()} process killed")
 
 def help_func():
-    print('''Threat Intelligence-based Malware Analysis (TIMA)
+    print(pyfiglet.figlet_format('Filyzer'))
+    print('''
     --hash  Takes hash values as an argument. Print "Malware" if detected as malware in any platform else "None" will be printed 
     --path  Takes path of an file as an argument, and retrieve the file hash
     --process   Takes process name as an argument, and if found as malicious terminates the process
@@ -386,14 +380,10 @@ def main_sec(): #function to handle various commandline arguments to query in TI
     for i in range(len(sys.argv)):
         if sys.argv[i] == "--hash":
             fhash = sys.argv[i + 1]
-            start_time= time.time()
-
             print(md_hash_query(fhash))
             print(hb_hash_query(fhash))
             print(vt_hash_query(fhash))
             print(mb_query(fhash))
-            end_time = time.time()
-            print("total time :", end_time - start_time)
 
         if sys.argv[i] == "--path":
             fpath = sys.argv[i + 1]
