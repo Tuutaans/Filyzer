@@ -61,8 +61,9 @@ def mb_query(hash): #function to query a hash in malwarebazaar
             response = f.read()
             match = re.search(r"query_status\S:.*ok\S", str(response))
             if match:
+                print("Sample found in MalwareBazaar")
                 return "Malware"
-
+            print("Sample not found in MalwareBazaar")
     else:
         # Make a new request to MalwareBazaar
         url = "https://mb-api.abuse.ch/api/v1/"
@@ -80,35 +81,24 @@ def mb_query(hash): #function to query a hash in malwarebazaar
         if response.status_code == 200:
             response = json.loads(response.text)
             if response['query_status'] == "hash_not_found":
-                return False
+                print('Sample not found in MalwareBazaar')
             elif response['query_status'] == "http_post_expected":
-                return False
+                pass
             elif response['query_status'] == "illegal_hash":
-                return False
+                pass
             elif response['query_status'] == "no_hash_provided":
-                return False
+                pass
             elif response['query_status'] == "no_results":
-                return False
+                pass
             else:
                 if response['query_status'] == "ok":
+                    print('Sample found in MalwareBazaar')
                     return "Malware"
-                return False
-
+                
         else:
             print(f"An error occurred while querying MalwareBazaar: {response.status_code}")
-            return False
 
 def md_hash_query(hash):
-    """
-    Queries MetaDefender Cloud for information about a file with the given hash.
-    
-    Args:
-        hash (str): The hash of the file to be analyzed.
-        
-    Returns:
-        bool: True if the file is detected as malicious by MetaDefender Cloud, False otherwise.
-    """
-    
     api_key = values['md_api']
     cache_file = f"{hash}_md.pkl"
     
@@ -119,7 +109,10 @@ def md_hash_query(hash):
             response = json.load(f)
             match = re.search(r"scan_all_result_a.*I|infected.*", str(response))
             if match:
+                print("Sample found in MetaDefender")
                 return "Malware"
+            print("Sample not found in MetaDefender")
+
     
         # Make a new request to MetaDefender Cloud
     url = f"https://api.metadefender.com/v4/hash/{hash}"
@@ -141,24 +134,16 @@ def md_hash_query(hash):
                 return "Malware"
         except:
             if "Infect" in data['scan_results']['scan_all_result_a'] or "infect" in data['scan_results']['scan_all_result_a']: 
+                print("Sample found in MetaDefender")
                 return "Malware"
-        
+            print("Sample not found in MetaDefender")
     else:
         # There was an error with the request
         print(f"An error occurred while querying MetaDefender Cloud: {response.status_code}")
         return False
 
 
-def hb_hash_query(hash): #queries hash in hybrid-analysis
-    """
-    Queries Hybrid Analysis for information about a file with the given hash.
-    
-    Args:
-        hash (str): The hash of the file to be analyzed.
-        
-    Returns:
-        bool: True if the file is detected as malicious by Hybrid Analysis, False otherwise.
-    """
+def hb_hash_query(hash): #queries hash in hybrid-analysis       
     api_key = values['hb_api']
     cache_file = f"{hash}_hb.pkl"
     
@@ -169,7 +154,9 @@ def hb_hash_query(hash): #queries hash in hybrid-analysis
             response = json.load(f)
             for d in response:
                 if d.get("verdict") == "malicious":
+                    print("Sample found in hybrid-Analysis")
                     return "Malware"
+                print("Sample not found in hybrid-Analysis")
     
     else:
         # Make a new request to Hybrid Analysis
@@ -196,16 +183,17 @@ def hb_hash_query(hash): #queries hash in hybrid-analysis
                     json.dump(data,f)
             except Exception as e:
                 print(e)
-                return False
+                
 
             for d in data:
                 if d.get("verdict") == "malicious":
+                    print("Sample found in hybrid-Analysis")
                     return "Malware"
-            return False
+            print("Sample not found in hybrid-Analysis")
         else:
             # There was an error with the request
             print(f"An error occurred while querying Hybrid Analysis: {response.status_code}")
-            return False
+            
 
 
 def vt_hash_query(hash): #function to query hash in virustotal
@@ -219,7 +207,9 @@ def vt_hash_query(hash): #function to query hash in virustotal
             response = json.load(f)
             match = re.search(r"malicious.*\d+,", str(response))
             if response['malicious'] > 0:
+                print("Sample found in VirusTotal")
                 return "Malware"
+            print("Sample not found in VirusTotal")
     
     else:
         try:
@@ -240,8 +230,10 @@ def vt_hash_query(hash): #function to query hash in virustotal
                 json.dump(file_report["data"]["attributes"]["last_analysis_stats"], f)
 
             if int(num_vendors_detected_malicious) > 0:
+                print("Sample found in VirusTotal")
                 return "Malware"
-            
+            print("Sample not found in VirusTotal")
+
         else:
             print(f"An error occurred: {response.status_code}")
             return False
@@ -309,7 +301,7 @@ def hash_calc(path): #function to calculate file hash when path is provided
     with open(path, 'rb') as f:
         data = f.read()
     hash = hashlib.sha256(data).hexdigest()
-    return [md_hash_query(hash), hb_hash_query(hash), vt_hash_query(hash), mb_query(hash)]
+    return [vt_hash_query(hash), md_hash_query(hash), hb_hash_query(hash), mb_query(hash)]
 
 def file_isolate(path):
     file_opt = hash_calc(path)  
@@ -380,10 +372,10 @@ def main_sec(): #function to handle various commandline arguments to query in TI
     for i in range(len(sys.argv)):
         if sys.argv[i] == "--hash":
             fhash = sys.argv[i + 1]
-            print(md_hash_query(fhash))
-            print(hb_hash_query(fhash))
-            print(vt_hash_query(fhash))
-            print(mb_query(fhash))
+            vt_hash_query(fhash)
+            md_hash_query(fhash)
+            hb_hash_query(fhash)
+            mb_query(fhash)
 
         if sys.argv[i] == "--path":
             fpath = sys.argv[i + 1]
@@ -414,3 +406,4 @@ def main_sec(): #function to handle various commandline arguments to query in TI
             help_func()
 
 main_sec()
+
